@@ -1,0 +1,6 @@
+fastapi[standard]==0.129.1
+langgraph==1.2.8
+langchain-google-genai==4.2.7
+pydantic==2.13.0
+psycopg[binary]==3.3.4
+sqlalchemy==2.0.51
