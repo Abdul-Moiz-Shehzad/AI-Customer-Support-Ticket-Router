@@ -4,3 +4,5 @@ langchain-google-genai==4.2.7
 pydantic==2.13.0
 psycopg[binary]==3.3.4
 sqlalchemy==2.0.51
+uvicorn==0.50.2
+-e .
