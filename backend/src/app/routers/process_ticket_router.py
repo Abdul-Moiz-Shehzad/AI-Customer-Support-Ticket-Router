@@ -72,3 +72,24 @@ Query processed ticket classification results from MongoDB.
             detail="Ticket not found"
         )
     return ticket
+
+
+@ticket_router.get("/tickets")
+async def get_all_tickets():
+    """
+    Query all ticket classification results from MongoDB.
+    """
+    from app.services.database import tickets_collection
+    if tickets_collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database connection not available"
+        )
+    
+    tickets = []
+    cursor = tickets_collection.find({}).sort("created_at", -1)
+    async for ticket in cursor:
+        if "_id" in ticket:
+            ticket["_id"] = str(ticket["_id"])
+        tickets.append(ticket)
+    return tickets

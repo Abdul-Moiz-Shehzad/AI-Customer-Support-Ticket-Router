@@ -4,8 +4,9 @@ import Tickets from "./pages/tickets";
 import Dashboard from "./pages/dashboard";
 import NotFound from "./pages/notFound";
 
-function Main_app() {
+function MainApp() {
   return (
+    document.title = "TechEase Cloud Support Ticket Router",
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/tickets" element={<Tickets />} />
@@ -18,9 +19,10 @@ function Main_app() {
 function App() {
   return (
     <BrowserRouter>
-      <Main_app />
+      <MainApp />
     </BrowserRouter>
   )
 }
+
 
 export default App;
