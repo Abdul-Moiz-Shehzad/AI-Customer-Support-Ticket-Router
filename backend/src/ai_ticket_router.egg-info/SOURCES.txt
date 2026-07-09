@@ -1,0 +1,13 @@
+setup.py
+src/ai_ticket_router.egg-info/PKG-INFO
+src/ai_ticket_router.egg-info/SOURCES.txt
+src/ai_ticket_router.egg-info/dependency_links.txt
+src/ai_ticket_router.egg-info/top_level.txt
+src/app/__init__.py
+src/app/main.py
+src/app/models.py
+src/app/worker.py
+src/app/routers/__init__.py
+src/app/routers/process_ticket_router.py
+src/utils/__init__.py
+src/utils/config.py

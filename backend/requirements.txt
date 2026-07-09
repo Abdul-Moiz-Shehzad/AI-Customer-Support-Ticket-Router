@@ -5,4 +5,9 @@ pydantic==2.13.0
 psycopg[binary]==3.3.4
 sqlalchemy==2.0.51
 uvicorn==0.50.2
+python-dotenv==1.2.2
+motor==3.7.1
+pymongo==4.17.0
+aio-pika==9.5.4
+nltk==3.10.0
 -e .

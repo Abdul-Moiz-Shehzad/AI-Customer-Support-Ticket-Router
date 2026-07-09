@@ -1,0 +1,55 @@
+import os
+import logging
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+from app.models import TicketState
+from utils.config import CLASSIFICATION_MODEL
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+class CategorizationResult(BaseModel):
+    category: str = Field(description="The category of the ticket: 'Billing', 'Technical', 'Feature Request', or 'General Inquiry'")
+    department: str = Field(description="The department to route to: 'Billing', 'Technical', 'Product', or 'Support'")
+
+def fallback_categorize(message: str) -> dict:
+    msg = (message or "").lower()
+    import re
+    words = set(re.findall(r'\w+', msg))
+    if any(k in words for k in ["refund", "invoice", "charge", "billing", "payment", "subscribe", "cancel", "price"]):
+        return {"category": "Billing", "department": "Billing"}
+    elif any(k in words for k in ["error", "crash", "bug", "broken", "load", "database", "api", "integration", "fail", "login", "password"]):
+        return {"category": "Technical", "department": "Technical"}
+    elif any(k in words for k in ["feature", "request", "add", "enhance", "suggest", "update", "idea", "improvement"]):
+        return {"category": "Feature Request", "department": "Product"}
+    else:
+        return {"category": "General Inquiry", "department": "Support"}
+
+async def categorize_ticket(state: TicketState) -> dict:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        logger.warning("No Gemini API key found. Using keyword fallback for categorization.")
+        return fallback_categorize(state.message)
+
+    try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        llm = ChatGoogleGenerativeAI(model=CLASSIFICATION_MODEL, google_api_key=api_key)
+        structured_llm = llm.with_structured_output(CategorizationResult)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert customer support ticket router. Categorize the customer support ticket message."),
+            ("human", "Ticket Message:\n{message}\n\nSelect exactly one category from:\n- Billing\n- Technical\n- Feature Request\n- General Inquiry\n\nAlso select the corresponding department:\n- Billing -> Billing\n- Technical -> Technical\n- Feature Request -> Product\n- General Inquiry -> Support")
+        ])
+
+        chain = prompt | structured_llm
+        result = await chain.ainvoke({"message": state.message})
+        
+        return {
+            "category": result.category,
+            "department": result.department
+        }
+    except Exception as e:
+        logger.error(f"Error in Gemini categorization: {e}. Falling back to keywords.")
+        return fallback_categorize(state.message)
