@@ -21,6 +21,7 @@ class TicketState(BaseModel):
     priority: str = ""
     sentiment: str = ""
     escalation_required: bool = False
+    is_in_domain: bool = True
     department: str = ""
     kb_context: str = ""
     reply_message: str = ""

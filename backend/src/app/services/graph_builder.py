@@ -31,7 +31,7 @@ async def node_context_buildup(state: TicketState) -> dict:
         from pydantic import BaseModel, Field
         
         class TicketValidationResult(BaseModel):
-            is_in_domain: bool = Field(description="True if the message is in the customer support ticketing domain. False if it is coding help, jokes, humor, politics, etc.")
+            is_in_domain: bool = Field(description="True if the message is in the customer support ticketing domain for TechEase Cloud. False if it is coding help, jokes, humor, memes, politics, medical questions, or general chat.")
             is_answerable: bool = Field(description="True if the provided Knowledge Base Context contains the exact information required to answer the customer message. False if the context is missing, irrelevant, or does not directly address the customer message.")
 
         llm = ChatGoogleGenerativeAI(model=CLASSIFICATION_MODEL, google_api_key=api_key)
@@ -39,9 +39,9 @@ async def node_context_buildup(state: TicketState) -> dict:
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", (
-                "You are an expert customer support ticket validator.\n"
+                "You are an expert customer support ticket validator for TechEase Cloud.\n"
                 "Your job is to analyze the Customer Message and the provided Knowledge Base Context to determine:\n"
-                "1. If the message is within the customer support ticketing domain (e.g. billing, account management, bug reporting, technical features). If the message is coding humor, coding questions/help, politics, jokes, or general chat unrelated to customer support, set 'is_in_domain' to False.\n"
+                "1. If the message is within the customer support ticketing domain (e.g. billing, invoices, account actions/settings like password resets, email changes, bug reporting, technical features). Note that general account actions/settings and billing inquiries are fully IN-DOMAIN. If the message is about memes/humor, politics, general coding/programming help (unrelated to using the TechEase API platform), medical/health advice, or general chat unrelated to customer support, set 'is_in_domain' to False.\n"
                 "2. If the provided Knowledge Base Context contains the exact details/information required to address the customer's specific question. If the context is empty, generic, or does not contain the specific answer (for example, if the customer asks how to permanently delete their account but the KB context does not mention how to permanently delete their account), set 'is_answerable' to False."
             )),
             ("human", (
@@ -59,8 +59,10 @@ async def node_context_buildup(state: TicketState) -> dict:
         
         logger.info(f"Ticket validation result: is_in_domain={result.is_in_domain}, is_answerable={result.is_answerable}")
         
-        if not result.is_in_domain or not result.is_answerable:
-            return {"escalation_required": True}
+        return {
+            "escalation_required": result.is_in_domain and not result.is_answerable,
+            "is_in_domain": result.is_in_domain
+        }
             
     except Exception as e:
         logger.error(f"Error in ticket validation: {e}")
@@ -68,6 +70,23 @@ async def node_context_buildup(state: TicketState) -> dict:
     return {}
 
 async def node_auto_reply(state: TicketState) -> dict:
+    if not state.is_in_domain:
+        reply = (
+            "I am an AI agent designed to assist you with the following.\n\n"
+            "TechEase Cloud provides:\n"
+            "● Cloud storage\n"
+            "● Team collaboration\n"
+            "● Subscription plans\n"
+            "● API platform\n\n"
+            "and their account related stuff."
+        )
+        return {
+            "reply_message": reply,
+            "auto_reply_sent": True,
+            "routed_to_queue": False,
+            "escalation_required": False
+        }
+
     import os
     from utils.config import REPLY_MODEL
     
