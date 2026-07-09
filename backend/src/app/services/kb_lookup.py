@@ -269,7 +269,11 @@ def fallback_categorize(message: str) -> str:
     words = set(re.findall(r'\w+', msg))
     if any(k in words for k in ["refund", "invoice", "charge", "billing", "payment", "subscribe", "cancel", "price"]):
         return "billing"
-    elif any(k in words for k in ["error", "crash", "bug", "broken", "load", "database", "api", "integration", "fail", "login", "password"]):
+    elif any(k in words for k in ["security", "unauthorized", "compromise", "compromised", "hack", "suspicious", "abuse", "access"]):
+        return "security"
+    elif any(k in words for k in ["password", "login", "reset", "lock", "locked", "email", "profile", "account"]):
+        return "account"
+    elif any(k in words for k in ["error", "crash", "bug", "broken", "load", "database", "api", "integration", "fail"]):
         return "technical"
     elif any(k in words for k in ["feature", "request", "add", "enhance", "suggest", "update", "idea", "improvement"]):
         return "feature"
@@ -295,6 +299,9 @@ TOKENIZED_CORPUS = [
 bm25_index = BM25(TOKENIZED_CORPUS)
 
 def search_kb(message: str, category: str = None) -> str:
+    if not category:
+        category = fallback_categorize(message)
+        
     query_tokens = preprocess_text(message)
     
     scored_articles = []
@@ -323,10 +330,9 @@ def search_kb(message: str, category: str = None) -> str:
             has_title_substring = True
             
         # We only consider the article if there is actually some overlap in words
-        # (i.e. bm25_score > 0) OR if there is a direct title substring match.
-        # This prevents returning irrelevant articles from the category
-        # when the category boost is applied but there's no actual term overlap.
-        if bm25_score > 0.0 or has_title_substring:
+        # (i.e. bm25_score > 0) OR if there is a direct title substring match
+        # OR if there is a category match (to include important category guidelines with 0 word overlap).
+        if bm25_score > 0.0 or has_title_substring or is_category_match:
             scored_articles.append((score, art))
             
     # Sort and take top matches

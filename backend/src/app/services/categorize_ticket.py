@@ -9,8 +9,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class CategorizationResult(BaseModel):
-    category: str = Field(description="The category of the ticket: 'Billing', 'Technical', 'Feature Request', or 'General Inquiry'")
-    department: str = Field(description="The department to route to: 'Billing', 'Technical', 'Product', or 'Support'")
+    category: str = Field(description="The category of the ticket: 'Billing', 'Technical', 'Feature Request', 'Security', 'Account', or 'General Inquiry'")
+    department: str = Field(description="The department to route to: 'Billing', 'Technical', 'Product', 'Support', or 'Security'")
 
 def fallback_categorize(message: str) -> dict:
     msg = (message or "").lower()
@@ -18,7 +18,11 @@ def fallback_categorize(message: str) -> dict:
     words = set(re.findall(r'\w+', msg))
     if any(k in words for k in ["refund", "invoice", "charge", "billing", "payment", "subscribe", "cancel", "price"]):
         return {"category": "Billing", "department": "Billing"}
-    elif any(k in words for k in ["error", "crash", "bug", "broken", "load", "database", "api", "integration", "fail", "login", "password"]):
+    elif any(k in words for k in ["security", "unauthorized", "compromise", "compromised", "hack", "suspicious", "abuse", "access"]):
+        return {"category": "Security", "department": "Security"}
+    elif any(k in words for k in ["password", "login", "reset", "lock", "locked", "email", "profile", "account"]):
+        return {"category": "Account", "department": "Support"}
+    elif any(k in words for k in ["error", "crash", "bug", "broken", "load", "database", "api", "integration", "fail"]):
         return {"category": "Technical", "department": "Technical"}
     elif any(k in words for k in ["feature", "request", "add", "enhance", "suggest", "update", "idea", "improvement"]):
         return {"category": "Feature Request", "department": "Product"}
@@ -40,7 +44,23 @@ async def categorize_ticket(state: TicketState) -> dict:
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert customer support ticket router. Categorize the customer support ticket message."),
-            ("human", "Ticket Message:\n{message}\n\nSelect exactly one category from:\n- Billing\n- Technical\n- Feature Request\n- General Inquiry\n\nAlso select the corresponding department:\n- Billing -> Billing\n- Technical -> Technical\n- Feature Request -> Product\n- General Inquiry -> Support")
+            ("human", (
+                "Ticket Message:\n{message}\n\n"
+                "Select exactly one category from:\n"
+                "- Billing\n"
+                "- Technical\n"
+                "- Feature Request\n"
+                "- Security\n"
+                "- Account\n"
+                "- General Inquiry\n\n"
+                "Also select the corresponding department:\n"
+                "- Billing -> Billing\n"
+                "- Technical -> Technical\n"
+                "- Feature Request -> Product\n"
+                "- Security -> Security\n"
+                "- Account -> Support\n"
+                "- General Inquiry -> Support"
+            ))
         ])
 
         chain = prompt | structured_llm
