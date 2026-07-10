@@ -301,6 +301,11 @@ tr.interactive-row:hover {
   color: var(--text-secondary);
 }
 
+.badge-cached {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
 /* Ticket Processing / Result View */
 .result-box {
   margin-top: 30px;

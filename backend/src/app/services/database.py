@@ -12,9 +12,13 @@ try:
     client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     db = client[MONGO_DB]
     tickets_collection = db["tickets"]
+    kb_collection = db["kb_articles"]
+    cache_collection = db["ticket_cache"]
 except Exception as e:
     logger.error(f"Failed to initialize MongoDB client: {e}")
     tickets_collection = None
+    kb_collection = None
+    cache_collection = None
 
 async def ensure_db_indexes():
     if tickets_collection is not None:
@@ -23,6 +27,14 @@ async def ensure_db_indexes():
             logger.info("MongoDB index on ticket_id verified/created.")
         except Exception as e:
             logger.error(f"Failed to create MongoDB index: {e}")
+            
+    if cache_collection is not None:
+        try:
+            await cache_collection.create_index("message", unique=True)
+            await cache_collection.create_index("last_accessed_at", expireAfterSeconds=30 * 24 * 3600)
+            logger.info("MongoDB indexes on ticket_cache (unique on message, TTL on last_accessed_at) verified/created.")
+        except Exception as e:
+            logger.error(f"Failed to create ticket_cache MongoDB indexes: {e}")
 
 
 async def create_pending_ticket(ticket_data: dict) -> bool:

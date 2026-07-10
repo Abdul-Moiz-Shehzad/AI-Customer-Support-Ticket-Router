@@ -33,6 +33,7 @@ function Dashboard() {
   const completed = tickets.filter((t) => t.status === "completed").length;
   const pending = tickets.filter((t) => t.status === "pending").length;
   const failed = tickets.filter((t) => t.status === "failed").length;
+  const cacheHits = tickets.filter((t) => t.cache_hit === true).length;
 
   return (
     <div className="app-container">
@@ -61,6 +62,10 @@ function Dashboard() {
           <div className="stat-card">
             <div className="value" style={{ color: "var(--success-color)" }}>{completed}</div>
             <div className="label">Completed</div>
+          </div>
+          <div className="stat-card">
+            <div className="value" style={{ color: "#a855f7" }}>{cacheHits}</div>
+            <div className="label">Cache Hits</div>
           </div>
           <div className="stat-card">
             <div className="value" style={{ color: "var(--pending-color)" }}>{pending}</div>
@@ -118,6 +123,11 @@ function Dashboard() {
                       <span className={`badge badge-${ticket.status}`}>
                         {ticket.status}
                       </span>
+                      {ticket.cache_hit && (
+                        <span className="badge badge-cached" style={{ marginLeft: "8px" }}>
+                          Cached
+                        </span>
+                      )}
                     </td>
                     <td>{ticket.category || "—"}</td>
                     <td>
@@ -224,6 +234,16 @@ function Dashboard() {
                     <div className="result-label">Escalation Status</div>
                     <div className="result-value">
                       {selectedTicket.escalation_required ? "Human Intervention Required" : "AI Handled"}
+                    </div>
+                  </div>
+                  <div className="result-item">
+                    <div className="result-label">Resolution Mode</div>
+                    <div className="result-value">
+                      {selectedTicket.cache_hit ? (
+                        <span className="badge badge-cached">Semantic Cache Hit</span>
+                      ) : (
+                        <span style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>LLM LangGraph</span>
+                      )}
                     </div>
                   </div>
                 </div>

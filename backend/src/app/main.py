@@ -54,6 +54,13 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to verify NLTK resources: {e}")
 
+    logger.info("Ensuring knowledge base embeddings exist in database...")
+    try:
+        from app.services.kb_lookup import seed_kb_embeddings_if_empty
+        await seed_kb_embeddings_if_empty()
+    except Exception as e:
+        logger.error(f"Failed to seed/verify knowledge base embeddings: {e}")
+
     logger.info("Starting RabbitMQ background consumer worker...")
     try:
         rabbitmq_connection = await start_consumer()

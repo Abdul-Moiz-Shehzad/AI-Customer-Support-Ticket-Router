@@ -6,6 +6,11 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from app.models import TicketState
+from app.services.embeddings import (
+    generate_embeddings_batch,
+    generate_embedding_single,
+    cosine_similarity
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,22 +303,123 @@ TOKENIZED_CORPUS = [
 
 bm25_index = BM25(TOKENIZED_CORPUS)
 
-def search_kb(message: str, category: str = None) -> str:
+# Embedding models and helpers imported from app.services.embeddings
+
+async def seed_kb_embeddings_if_empty():
+    from app.services.database import kb_collection
+    if kb_collection is None:
+        logger.error("MongoDB collection is not initialized. Cannot seed KB embeddings.")
+        return
+        
+    try:
+        count = await kb_collection.count_documents({})
+        if count > 0:
+            logger.info("Knowledge base articles with embeddings already seeded.")
+            return
+            
+        logger.info("Seeding knowledge base articles with embeddings into MongoDB...")
+        texts = [f"Title: {art['title']}\nContent: {art['content']}" for art in KB_ARTICLES]
+        
+        try:
+            embeddings = generate_embeddings_batch(texts)
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings for seeding: {e}. Skipping database seeding.")
+            return
+            
+        db_docs = []
+        for i, art in enumerate(KB_ARTICLES):
+            db_docs.append({
+                "category": art["category"],
+                "title": art["title"],
+                "content": art["content"],
+                "embedding": embeddings[i]
+            })
+            
+        await kb_collection.insert_many(db_docs)
+        logger.info(f"Successfully seeded {len(db_docs)} KB articles with embeddings into MongoDB.")
+    except Exception as e:
+        logger.error(f"Error seeding KB articles into MongoDB: {e}")
+
+# cosine_similarity imported from app.services.embeddings
+
+async def search_kb(message: str, category: str = None) -> str:
     if not category:
         category = fallback_categorize(message)
         
-    query_tokens = preprocess_text(message)
+    from app.services.database import kb_collection
     
+    # Check if we can do vector similarity lookup from MongoDB
+    if kb_collection is not None:
+        try:
+            # 1. Generate query embedding
+            query_embedding = generate_embedding_single(message)
+            
+            # 2. Get all articles with embeddings from MongoDB
+            cursor = kb_collection.find({})
+            db_articles = []
+            async for doc in cursor:
+                db_articles.append(doc)
+                
+            if db_articles:
+                scored_articles = []
+                message_lower = (message or "").lower()
+                
+                for art in db_articles:
+                    doc_embedding = art.get("embedding")
+                    if not doc_embedding:
+                        continue
+                    
+                    # Compute similarity
+                    sim_score = cosine_similarity(query_embedding, doc_embedding)
+                    score = sim_score
+                    
+                    # 1. Boost score if categories match
+                    is_category_match = False
+                    if category:
+                        cat_clean = category.strip().lower()
+                        mapped_keys = CATEGORY_MAPPING.get(cat_clean, [cat_clean])
+                        if any(m.lower() == art["category"].lower() for m in mapped_keys):
+                            score += 0.3
+                            is_category_match = True
+                            
+                    # 2. Boost score for direct title substring match
+                    title_lower = art["title"].lower()
+                    has_title_substring = False
+                    if len(title_lower) > 3 and title_lower in message_lower:
+                        score += 0.5
+                        has_title_substring = True
+                        
+                    # We consider the article if similarity is > 0.1 OR category matches OR title substring matches
+                    if sim_score > 0.1 or has_title_substring or is_category_match:
+                        scored_articles.append((score, art))
+                
+                # Sort and take top matches
+                scored_articles.sort(key=lambda x: x[0], reverse=True)
+                unique_articles = []
+                seen_titles = set()
+                for _, art in scored_articles:
+                    if art["title"] not in seen_titles:
+                        seen_titles.add(art["title"])
+                        unique_articles.append(art)
+                        if len(unique_articles) >= 3:
+                            break
+                            
+                if unique_articles:
+                    return "\n".join(f"- **{art['title']}**: {art['content']}" for art in unique_articles)
+        except Exception as e:
+            logger.error(f"Error in MongoDB vector similarity search: {e}. Falling back to BM25 search.")
+            
+    # Legacy BM25 fallback search
+    logger.info("Executing legacy BM25 token matching search...")
+    query_tokens = preprocess_text(message)
     scored_articles = []
     message_lower = (message or "").lower()
     
     for i, art in enumerate(KB_ARTICLES):
         doc_tokens = TOKENIZED_CORPUS[i]
         bm25_score = bm25_index.get_score(doc_tokens, query_tokens)
-        
         score = bm25_score
         
-        # 1. Boost score if categories match
         is_category_match = False
         if category:
             cat_clean = category.strip().lower()
@@ -322,20 +428,15 @@ def search_kb(message: str, category: str = None) -> str:
                 score += 3.0
                 is_category_match = True
                 
-        # 2. Boost score for direct title substring match
         title_lower = art["title"].lower()
         has_title_substring = False
         if len(title_lower) > 3 and title_lower in message_lower:
             score += 10.0
             has_title_substring = True
             
-        # We only consider the article if there is actually some overlap in words
-        # (i.e. bm25_score > 0) OR if there is a direct title substring match
-        # OR if there is a category match (to include important category guidelines with 0 word overlap).
         if bm25_score > 0.0 or has_title_substring or is_category_match:
             scored_articles.append((score, art))
             
-    # Sort and take top matches
     scored_articles.sort(key=lambda x: x[0], reverse=True)
     unique_articles = []
     seen_titles = set()
@@ -349,7 +450,7 @@ def search_kb(message: str, category: str = None) -> str:
     if unique_articles:
         return "\n".join(f"- **{art['title']}**: {art['content']}" for art in unique_articles)
         
-    # Fallback to category articles if no overlap was found
+    # Final fallback if absolutely no matches
     if not category:
         category = fallback_categorize(message)
         
@@ -369,6 +470,6 @@ def search_kb(message: str, category: str = None) -> str:
     return "\n".join(f"- **{art['title']}**: {art['content']}" for art in fallback_articles[:3])
 
 async def kb_lookup(state: TicketState) -> dict:
-    kb_context = search_kb(state.message, state.category)
+    kb_context = await search_kb(state.message, state.category)
     logger.info(f"Knowledge Base lookup found match of length: {len(kb_context)}")
     return {"kb_context": kb_context}
