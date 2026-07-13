@@ -13,13 +13,21 @@ def get_embedding_model():
         logger.info("SentenceTransformer model loaded successfully.")
     return _st_model
 
-def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+import asyncio
+
+def _generate_embeddings_batch_sync(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
     return model.encode(texts).tolist()
 
-def generate_embedding_single(text: str) -> list[float]:
+def _generate_embedding_single_sync(text: str) -> list[float]:
     model = get_embedding_model()
     return model.encode(text).tolist()
+
+async def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    return await asyncio.to_thread(_generate_embeddings_batch_sync, texts)
+
+async def generate_embedding_single(text: str) -> list[float]:
+    return await asyncio.to_thread(_generate_embedding_single_sync, text)
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     dot_product = sum(a * b for a, b in zip(v1, v2))

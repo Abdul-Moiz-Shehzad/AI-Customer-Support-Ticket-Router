@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "ticket_router": "./src/app/services/graph_builder.py:build_ticket_graph"
+  },
+  "env": ".env"
+}

@@ -29,6 +29,9 @@ def fallback_categorize(message: str) -> dict:
     else:
         return {"category": "General Inquiry", "department": "Support"}
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+
 async def categorize_ticket(state: TicketState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -36,9 +39,6 @@ async def categorize_ticket(state: TicketState) -> dict:
         return fallback_categorize(state.message)
 
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.prompts import ChatPromptTemplate
-        
         llm = ChatGoogleGenerativeAI(model=CLASSIFICATION_MODEL, google_api_key=api_key)
         structured_llm = llm.with_structured_output(CategorizationResult)
         

@@ -1,11 +1,20 @@
 import logging
+import os
+from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END
 from app.models import TicketState
 from app.services.categorize_ticket import categorize_ticket
 from app.services.prioritize_ticket import prioritize_ticket
 from app.services.kb_lookup import kb_lookup
+from utils.config import CLASSIFICATION_MODEL, REPLY_MODEL
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
 
 logger = logging.getLogger(__name__)
+
+class TicketValidationResult(BaseModel):
+    is_in_domain: bool = Field(description="True if the message is in the customer support ticketing domain for TechEase Cloud. False if it is coding help, jokes, humor, memes, politics, medical questions, or general chat.")
+    is_answerable: bool = Field(description="True if the provided Knowledge Base Context contains the exact information required to answer the customer message. False if the context is missing, irrelevant, or does not directly address the customer message.")
 
 async def node_categorize(state: TicketState) -> dict:
     return await categorize_ticket(state)
@@ -17,23 +26,12 @@ async def node_kb_lookup(state: TicketState) -> dict:
     return await kb_lookup(state)
 
 async def node_context_buildup(state: TicketState) -> dict:
-    import os
-    from utils.config import CLASSIFICATION_MODEL
-    
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         logger.warning("No Gemini API key found for validation. Skipping validation.")
         return {}
         
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.prompts import ChatPromptTemplate
-        from pydantic import BaseModel, Field
-        
-        class TicketValidationResult(BaseModel):
-            is_in_domain: bool = Field(description="True if the message is in the customer support ticketing domain for TechEase Cloud. False if it is coding help, jokes, humor, memes, politics, medical questions, or general chat.")
-            is_answerable: bool = Field(description="True if the provided Knowledge Base Context contains the exact information required to answer the customer message. False if the context is missing, irrelevant, or does not directly address the customer message.")
-
         llm = ChatGoogleGenerativeAI(model=CLASSIFICATION_MODEL, google_api_key=api_key)
         structured_llm = llm.with_structured_output(TicketValidationResult)
         
@@ -87,18 +85,12 @@ async def node_auto_reply(state: TicketState) -> dict:
             "escalation_required": False
         }
 
-    import os
-    from utils.config import REPLY_MODEL
-    
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         logger.warning("No Gemini API key found for auto-reply. Using default template.")
         reply = f"Hello {state.customer_name or 'Customer'},\n\nThank you for reaching out. Based on your message, we found the following information from our knowledge base:\n\n{state.kb_context}\n\nHope this helps! Let us know if you need anything else."
     else:
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.prompts import ChatPromptTemplate
-            
             llm = ChatGoogleGenerativeAI(model=REPLY_MODEL, google_api_key=api_key)
             prompt = ChatPromptTemplate.from_messages([
                 ("system", (

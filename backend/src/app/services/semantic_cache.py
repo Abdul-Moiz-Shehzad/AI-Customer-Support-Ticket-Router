@@ -12,7 +12,7 @@ async def get_cached_ticket(message: str, threshold: float = 0.70) -> dict | Non
 
     try:
         # Generate query embedding
-        query_embedding = generate_embedding_single(message)
+        query_embedding = await generate_embedding_single(message)
         
         # Query all cached tickets
         cursor = cache_collection.find({})
@@ -56,7 +56,7 @@ async def add_to_cache(message: str, result: dict) -> None:
 
     try:
         # Generate embedding for the cached message
-        embedding = generate_embedding_single(message)
+        embedding = await generate_embedding_single(message)
         
         cache_entry = {
             "message": message,

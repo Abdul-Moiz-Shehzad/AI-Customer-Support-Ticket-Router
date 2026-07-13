@@ -42,6 +42,9 @@ def fallback_prioritize(message: str, subscription: str) -> dict:
         "escalation_required": escalation_required
     }
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+
 async def prioritize_ticket(state: TicketState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -49,9 +52,6 @@ async def prioritize_ticket(state: TicketState) -> dict:
         return fallback_prioritize(state.message, state.subscription)
 
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.prompts import ChatPromptTemplate
-        
         llm = ChatGoogleGenerativeAI(model=CLASSIFICATION_MODEL, google_api_key=api_key)
         structured_llm = llm.with_structured_output(PrioritizationResult)
         

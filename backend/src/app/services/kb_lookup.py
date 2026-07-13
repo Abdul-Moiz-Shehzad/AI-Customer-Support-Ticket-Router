@@ -1,6 +1,7 @@
 import logging
 import math
 import re
+import asyncio
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -11,11 +12,17 @@ from app.services.embeddings import (
     generate_embedding_single,
     cosine_similarity
 )
+from app.services.database import kb_collection
 
 logger = logging.getLogger(__name__)
 
+_nltk_resources_ensured = False
+
 # Function to ensure NLTK resources
 def ensure_nltk_resources():
+    global _nltk_resources_ensured
+    if _nltk_resources_ensured:
+        return
     import nltk
     for resource in ['punkt', 'punkt_tab', 'stopwords', 'wordnet', 'omw-1.4']:
         try:
@@ -29,6 +36,7 @@ def ensure_nltk_resources():
                 nltk.download(resource, quiet=True)
             except Exception as e:
                 logger.error(f"Failed to download NLTK resource {resource}: {e}")
+    _nltk_resources_ensured = True
 
 # Preprocess helper
 def preprocess_text(text: str) -> list:
@@ -306,7 +314,6 @@ bm25_index = BM25(TOKENIZED_CORPUS)
 # Embedding models and helpers imported from app.services.embeddings
 
 async def seed_kb_embeddings_if_empty():
-    from app.services.database import kb_collection
     if kb_collection is None:
         logger.error("MongoDB collection is not initialized. Cannot seed KB embeddings.")
         return
@@ -321,7 +328,7 @@ async def seed_kb_embeddings_if_empty():
         texts = [f"Title: {art['title']}\nContent: {art['content']}" for art in KB_ARTICLES]
         
         try:
-            embeddings = generate_embeddings_batch(texts)
+            embeddings = await generate_embeddings_batch(texts)
         except Exception as e:
             logger.error(f"Failed to generate embeddings for seeding: {e}. Skipping database seeding.")
             return
@@ -346,13 +353,11 @@ async def search_kb(message: str, category: str = None) -> str:
     if not category:
         category = fallback_categorize(message)
         
-    from app.services.database import kb_collection
-    
     # Check if we can do vector similarity lookup from MongoDB
     if kb_collection is not None:
         try:
             # 1. Generate query embedding
-            query_embedding = generate_embedding_single(message)
+            query_embedding = await generate_embedding_single(message)
             
             # 2. Get all articles with embeddings from MongoDB
             cursor = kb_collection.find({})
@@ -411,7 +416,7 @@ async def search_kb(message: str, category: str = None) -> str:
             
     # Legacy BM25 fallback search
     logger.info("Executing legacy BM25 token matching search...")
-    query_tokens = preprocess_text(message)
+    query_tokens = await asyncio.to_thread(preprocess_text, message)
     scored_articles = []
     message_lower = (message or "").lower()
     
